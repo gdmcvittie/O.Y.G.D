@@ -477,7 +477,7 @@ void reset(){
   BOMB_DONE = false;
   BOMB_X = PLAYER_X+2;
   BOMB_Y = PLAYER_Y+2;
-  BOMBS_LEFT = 5;
+  BOMBS_LEFT = 3;
 
   TIME = 10;
   
