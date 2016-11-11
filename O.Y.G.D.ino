@@ -117,7 +117,7 @@ void buildLevel(){
       arduboy.setCursor(12,12);
       arduboy.print( String("YOU HAVE ONE JOB,") );
       arduboy.setCursor(12,20);
-      arduboy.print( String("5 BOMBS, AND 10s:") );      
+      arduboy.print( String("3 BOMBS, AND 10s:") );      
       arduboy.setCursor(12,28);
       arduboy.print( String("GET TO THE DOOR...") );
       arduboy.setCursor(12,36);
