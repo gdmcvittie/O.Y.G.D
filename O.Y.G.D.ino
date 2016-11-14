@@ -3,7 +3,16 @@
  * Grant D. McVittie
  * PixelPlatforms
  * 
- * v0.1
+ * v0.2
+ * 
+ * UPDATES:
+ * - more backgrounds and spike types
+ * - added a vertical baddie
+ * - drop a bomb with b, explode it with a (use to be timed, but now you have control)
+ * - randomized door position
+ * - added easy mode
+ * - added sound on/off
+ * - adjusted hit areas
  */
 #include <Arduboy2.h>
 #include <ArduboyTones.h>
@@ -16,6 +25,17 @@ ArduboyTones sound(arduboy.audio.enabled);
  * timer
  */
 int TIME = 10;
+
+/*
+ * MODE
+ * 0 = normal
+ * 1 = easy
+ */
+bool EASY = true;
+/*
+ * audio
+ */
+bool SOUND_ENABLED = false;
 /*
  * game state
  * 0 = intro
@@ -55,15 +75,30 @@ bool BADDIE1_LEFT = true;
 int BADDIE2_X = 112;
 int BADDIE2_Y = 32;
 bool BADDIE2_LEFT = false;
+int BADDIE3_X = 24;
+int BADDIE3_Y = 16;
+bool BADDIE3_DOWN = true;
+int BADDIE4_X = 24;
+int BADDIE4_Y = 16;
+bool BADDIE4_DOWN = false;
 /*
  * collisions
  */
 bool COLLIDE = false;
+bool COLLIDE_BLOCK = false;
 /*
  * grid positions (first [8,8] is reserved for player)
  */
-int X_POSITIONS [] = {8,16,24,32,40,48,56,64,72,80,88,96,104,112};
-int Y_POSITIONS [] = {8,16,24,32,40,48,56};
+int X_POSITIONS [] = {8,24,32,40,56,64,72,88,104,112};
+int X_POS_LEN = 9;
+int Y_POSITIONS [] = {8,24,40,56};
+int Y_POS_LEN = 3;
+int BLOCK_X_POSITIONS [] = {16,48,80,96};
+int BLOCK_X_POS_LEN = 3;
+int BLOCK_Y_POSITIONS [] = {16,32,48};
+int BLOCK_Y_POS_LEN = 2;
+int DOOR_X_POSITIONS [] = {24,32,40,56,64,72,88,104,112};
+int DOOR_X_POS_LEN = 8;
 /*
  * bounderies
  */
@@ -76,12 +111,20 @@ int MAX_Y = 48;
  */
 int MAX_CRATES = 80; //actually half this, but we store both x and y, so double.
 int CRATE_POSITIONS[80];
+int MAX_BLOCKS = 20;
+int BLOCK_POSITIONS[20];
 bool CRATES_ADDED = false;
 /*
  * door for level complete
  */
 int DOOR_X = 112;
 int DOOR_Y = 48;
+/*
+ * background to use
+ */
+int BG = 0;
+int CR8 = 0;
+
 
 /*
  * ok go
@@ -112,6 +155,16 @@ void buildLevel(){
   switch(GAME_STATE){
     case 0:
       arduboy.drawSlowXYBitmap(0,0,title, 128, 64, WHITE);
+      if(SOUND_ENABLED){
+        arduboy.drawBitmap(29,47,sound_on,16,16,BLACK);
+      }else{
+        arduboy.drawBitmap(29,47,sound_off,16,16,BLACK);
+      }
+      if(!EASY){
+        arduboy.drawBitmap(50,47,hard,16,16,BLACK);
+      }else{
+        arduboy.drawBitmap(50,47,easy,16,16,BLACK);
+      }
     break;
     case 2:
       arduboy.setCursor(12,12);
@@ -124,7 +177,7 @@ void buildLevel(){
       arduboy.print( String("ALIVE.") );
       arduboy.setCursor(64,56);
       arduboy.print( String("GOOD LUCK!") );
-      delay(250);
+      delay(150);
     break;
     case 1:
       if(COLLIDE){
@@ -134,15 +187,24 @@ void buildLevel(){
           reset();
         }
       } else {
-        arduboy.drawSlowXYBitmap(0,0,background, 128, 64, WHITE);
+        
+        if(BG == 0){
+          arduboy.drawSlowXYBitmap(0,0,background3, 128, 64, WHITE);
+        } else if(BG == 1){
+          arduboy.drawSlowXYBitmap(0,0,background2, 128, 64, WHITE);
+        } else{
+          arduboy.drawSlowXYBitmap(0,0,background, 128, 64, WHITE);
+        }
+
+        
+        
         //crates
         if(CRATES_ADDED == false){
           generateCratePositions();
         } else {
           drawCrates();     
         }
-        //collisions
-        collisionDetection();
+        
         //player
         addPlayer();
         //baddies
@@ -151,6 +213,8 @@ void buildLevel(){
         addBombs();
         //countdown
         countDown();
+        //collisions
+        collisionDetection();
       }     
     break;
   }
@@ -162,11 +226,18 @@ void buildLevel(){
 }
 
 void countDown(){
-  if(arduboy.everyXFrames(30)){
+  int frm = 30;
+  if(EASY){
+    frm = 15;
+  }
+  if(arduboy.everyXFrames(frm)){
     if(TIME>1){
       TIME--;
     } else {
-      soundGameOver();
+      if(SOUND_ENABLED){
+        soundGameOver();
+      }
+      
       CURRENT_LEVEL = 1;
       reset();
     }
@@ -187,10 +258,26 @@ void countDown(){
   switch(GAME_STATE){
     //intro
     case 0:
-      if ( arduboy.pressed(A_BUTTON) || arduboy.pressed(B_BUTTON) ){
-        //reset();
+      if ( arduboy.pressed(A_BUTTON) ){
+        if(SOUND_ENABLED){
+          SOUND_ENABLED = false;
+        } else {
+          SOUND_ENABLED = true;
+        }
+      }
+      if ( arduboy.pressed(B_BUTTON) ){
+        if(EASY){
+          EASY = false;
+        } else {
+          EASY = true;
+        }
+      }
+      
+      if ( arduboy.pressed(RIGHT_BUTTON) || arduboy.pressed(LEFT_BUTTON) || arduboy.pressed(UP_BUTTON) || arduboy.pressed(DOWN_BUTTON) ){
         GAME_STATE = 2; 
       }
+      
+      delay(60);
     break;
     case 2:
       if ( arduboy.pressed(A_BUTTON) || arduboy.pressed(B_BUTTON) ){
@@ -199,6 +286,9 @@ void countDown(){
     break;
     //playing
     case 1:
+      if(EASY){
+        PLAYER_SPEED = 8;
+      }
       if(!COLLIDE){
         if ( arduboy.pressed(RIGHT_BUTTON) ){
           if(PLAYER_X < MAX_X){
@@ -207,7 +297,10 @@ void countDown(){
             PLAYER_DOWN = false;
             PLAYER_LEFT = true;
             PLAYER_RIGHT = false;
-            soundMove();
+            if(SOUND_ENABLED){
+              soundMove();
+            }
+            
           }
         }
         if ( arduboy.pressed(LEFT_BUTTON) ){
@@ -217,7 +310,9 @@ void countDown(){
             PLAYER_DOWN = false;
             PLAYER_LEFT = false;
             PLAYER_RIGHT = true;
-            soundMove();
+            if(SOUND_ENABLED){
+              soundMove();
+            }
           }
         }
         if ( arduboy.pressed(UP_BUTTON) ){
@@ -227,7 +322,9 @@ void countDown(){
             PLAYER_DOWN = false;
             PLAYER_LEFT = false;
             PLAYER_RIGHT = false;
-            soundMove();
+            if(SOUND_ENABLED){
+              soundMove();
+            }
           }
         }
         if ( arduboy.pressed(DOWN_BUTTON) ){
@@ -237,18 +334,30 @@ void countDown(){
             PLAYER_DOWN = true;
             PLAYER_LEFT = false;
             PLAYER_RIGHT = false;
-            soundMove();
+            if(SOUND_ENABLED){
+              soundMove();
+            }
           }
         }
-        if( arduboy.pressed(A_BUTTON) || arduboy.pressed(B_BUTTON) ){
+        if( arduboy.pressed(B_BUTTON) ){
           dropBomb();
         }     
-        
+        if( arduboy.pressed(A_BUTTON) ){
+          if(BOMB_DROPPED && !BOMB_DONE){
+            BOMB_DONE = true;
+            if(SOUND_ENABLED){
+              soundEgg();
+            }
+          }
+        }
       } else {
         if ( arduboy.pressed(A_BUTTON) || arduboy.pressed(B_BUTTON) ){
           CURRENT_LEVEL = 1;
           reset(); 
         }   
+      }
+      if(EASY){
+        delay(30);
       }
     break;
   }
@@ -264,24 +373,57 @@ void generateCratePositions(){
   arduboy.initRandomSeed();
   int i;
   for(i=0;i<MAX_CRATES;i=i+2){
-    int posX = rand() % 13;
-    int posY = rand() % 5;
+    int posX = rand() % X_POS_LEN;
+    int posY = rand() % Y_POS_LEN;
     //no crates in the player start position (8,8)
     if(posX == 0 && posY == 0){
       posX = 1;
       posY = 2;
-    }
+    }       
     CRATE_POSITIONS[i] = X_POSITIONS[posX];
     CRATE_POSITIONS[i+1] = Y_POSITIONS[posY];
   }
+
+  for(i=0;i<MAX_BLOCKS;i=i+2){
+    int posX = rand() % BLOCK_X_POS_LEN;
+    int posY = rand() % BLOCK_Y_POS_LEN;
+    BLOCK_POSITIONS[i] = BLOCK_X_POSITIONS[posX];
+    BLOCK_POSITIONS[i+1] = BLOCK_Y_POSITIONS[posY];
+  }
+
+  int doorX = rand() % DOOR_X_POS_LEN;
+  DOOR_X = DOOR_X_POSITIONS[doorX];
   CRATES_ADDED = true;  
 }
 void drawCrates(){
   int i;
+  int j;
   for(i=0;i<MAX_CRATES;i=i+2){
-    arduboy.drawBitmap(CRATE_POSITIONS[i],CRATE_POSITIONS[i+1],crate,8,8,BLACK);    
+    bool failed = true;
+    for(j=0;j<MAX_BLOCKS;j=j+2){
+      if(BLOCK_POSITIONS[j] != CRATE_POSITIONS[i] && BLOCK_POSITIONS[j+1] != CRATE_POSITIONS[i+1]){
+       failed = false;  
+      }
+    }
+    if(!failed){
+      if(CR8 == 0){
+        arduboy.drawBitmap(CRATE_POSITIONS[i],CRATE_POSITIONS[i+1],crate2,8,8,BLACK);  
+      } else if(CR8 == 1){
+        arduboy.drawBitmap(CRATE_POSITIONS[i],CRATE_POSITIONS[i+1],crate1,8,8,BLACK); 
+      } else {
+        arduboy.drawBitmap(CRATE_POSITIONS[i],CRATE_POSITIONS[i+1],crate,8,8,BLACK); 
+      }
+    }      
   }
-  //add door
+  for(i=0;i<MAX_BLOCKS;i=i+2){
+    if(BLOCK_POSITIONS[i] && BLOCK_POSITIONS[i] != 0 && BLOCK_POSITIONS[i] != 8){
+      if(BLOCK_POSITIONS[i+1] && BLOCK_POSITIONS[i+1] != 0 && BLOCK_POSITIONS[i+1] != 8){
+        arduboy.drawBitmap(BLOCK_POSITIONS[i],BLOCK_POSITIONS[i+1],block,8,8,BLACK);
+      }
+    }
+    
+  }
+  //add door  
   arduboy.drawBitmap(DOOR_X,DOOR_Y,door,8,8,BLACK);
 }
 
@@ -326,6 +468,7 @@ void addBaddies(){
   }else{
     arduboy.drawBitmap(BADDIE1_X,BADDIE1_Y,baddie1a,8,8,BLACK);
   }
+  
   //baddie 2
   if(BADDIE2_LEFT){
     if(BADDIE2_X>MIN_X){
@@ -345,6 +488,46 @@ void addBaddies(){
   }else{
     arduboy.drawBitmap(BADDIE2_X,BADDIE2_Y,baddie2a,8,8,BLACK);
   }
+
+  //baddie 3
+  if(BADDIE3_DOWN){
+    if(BADDIE3_Y<MAX_Y){
+      BADDIE3_Y++;
+    } else {
+      BADDIE3_DOWN = false;
+    }
+  } else {
+    if(BADDIE3_Y>MIN_Y){
+      BADDIE3_Y--;
+    } else {
+      BADDIE3_DOWN = true;
+    }
+  }
+  if(arduboy.everyXFrames(4)){
+    arduboy.drawBitmap(BADDIE3_X,BADDIE3_Y,baddie3b,8,8,BLACK);
+  }else{
+    arduboy.drawBitmap(BADDIE3_X,BADDIE3_Y,baddie3a,8,8,BLACK);
+  }
+
+  //baddie 4
+  if(BADDIE4_DOWN){
+    if(BADDIE4_Y<MAX_Y){
+      BADDIE4_Y++;
+    } else {
+      BADDIE4_DOWN = false;
+    }
+  } else {
+    if(BADDIE4_Y>MIN_Y){
+      BADDIE4_Y--;
+    } else {
+      BADDIE4_DOWN = true;
+    }
+  }
+  if(arduboy.everyXFrames(4)){
+    arduboy.drawBitmap(BADDIE4_X,BADDIE4_Y,baddie3a,8,8,BLACK);
+  }else{
+    arduboy.drawBitmap(BADDIE4_X,BADDIE4_Y,baddie3b,8,8,BLACK);
+  }
 }
 
 
@@ -354,7 +537,9 @@ void addBaddies(){
  */
  void dropBomb(){
   if(!BOMB_DONE && !BOMB_DROPPED && BOMBS_LEFT>0){
-    soundGood();
+    if(SOUND_ENABLED){
+      soundGood();
+    }
     BOMB_DROPPED = true;
     BOMB_X = PLAYER_X+2;
     BOMB_Y = PLAYER_Y+2;
@@ -408,12 +593,6 @@ void addBaddies(){
     BOMB_DROPPED = false;
     BOMB_DONE = false;
   }
-  if(arduboy.everyXFrames(60)){
-    if(BOMB_DROPPED && !BOMB_DONE){
-      BOMB_DONE = true;
-      soundEgg();
-    }
-  }
  }
 
 /*
@@ -424,24 +603,56 @@ void collisionDetection(){
   int i;
   for(i=0;i<MAX_CRATES;i=i+2){
     int CRATE[2]={CRATE_POSITIONS[i],CRATE_POSITIONS[i+1]};
-    if (PLAYER_X < CRATE[0] + 7 && PLAYER_X + 7 > CRATE[0] && PLAYER_Y < CRATE[1] + 7 && 7 + PLAYER_Y > CRATE[1]) {
+    if (PLAYER_X < CRATE[0] + 6 && PLAYER_X + 6 > CRATE[0] && PLAYER_Y < CRATE[1] + 6 && 6 + PLAYER_Y > CRATE[1]) {
       COLLIDE = true;
-      soundBad();
+      if(SOUND_ENABLED){
+        soundBad();
+      }
     }
   } 
 
+  for(i=0;i<MAX_BLOCKS;i=i+2){
+    int BLOCK[2]={BLOCK_POSITIONS[i],BLOCK_POSITIONS[i+1]};
+    if (PLAYER_X < BLOCK[0] + 6 && PLAYER_X + 6 > BLOCK[0] && PLAYER_Y < BLOCK[1] + 6 && 6 + PLAYER_Y > BLOCK[1]) {
+      COLLIDE = true;
+      if(SOUND_ENABLED){
+        soundBad();
+      }
+    }
+  }
+
   if (PLAYER_X < BADDIE1_X + 7 && PLAYER_X + 7 > BADDIE1_X && PLAYER_Y < BADDIE1_Y + 7 && 7 + PLAYER_Y > BADDIE1_Y) {
     COLLIDE = true;
-    soundBad();
+    if(SOUND_ENABLED){
+      soundBad();
+    }
   }
 
   if (PLAYER_X < BADDIE2_X + 7 && PLAYER_X + 7 > BADDIE2_X && PLAYER_Y < BADDIE2_Y + 7 && 7 + PLAYER_Y > BADDIE2_Y) {
     COLLIDE = true;
-    soundBad();
+    if(SOUND_ENABLED){
+      soundBad();
+    }
   }
 
+  if (PLAYER_X < BADDIE3_X + 7 && PLAYER_X + 7 > BADDIE3_X && PLAYER_Y < BADDIE3_Y + 7 && 7 + PLAYER_Y > BADDIE3_Y) {
+    COLLIDE = true;
+    if(SOUND_ENABLED){
+      soundBad();
+    }
+  }
+
+  if (PLAYER_X < BADDIE4_X + 7 && PLAYER_X + 7 > BADDIE4_X && PLAYER_Y < BADDIE4_Y + 7 && 7 + PLAYER_Y > BADDIE4_Y) {
+    COLLIDE = true;
+    if(SOUND_ENABLED){
+      soundBad();
+    }
+  }
+  
   if (PLAYER_X < DOOR_X + 7 && PLAYER_X + 7 > DOOR_X && PLAYER_Y < DOOR_Y + 7 && 7 + PLAYER_Y > DOOR_Y) {
-    soundHit();
+    if(SOUND_ENABLED){
+      soundHit();
+    }
     CURRENT_LEVEL++;
     reset();
   }
@@ -464,24 +675,51 @@ void reset(){
   COLLIDE = false;
   GAME_STATE = 1;
 
-  int posX1 = rand() % 14;
+  int posX1 = rand() % X_POS_LEN;
   BADDIE1_X = X_POSITIONS[posX1];
-  int posX2 = rand() % 14;
+  int posX2 = rand() % X_POS_LEN;
   BADDIE2_X = X_POSITIONS[posX2];
-  int posY1 = rand() % 6;
+  int posX3 = rand() % X_POS_LEN;
+  if(posX3==0){
+    posX3 = 1;
+  }
+  BADDIE3_X = X_POSITIONS[posX3];
+  int posX4 = rand() % X_POS_LEN;
+  if(posX4==0){
+    posX4 = 1;
+  }
+  BADDIE4_X = X_POSITIONS[posX4];
+  int posY1 = rand() % Y_POS_LEN;
   BADDIE1_Y = Y_POSITIONS[posY1];
-  int posY2 = rand() % 6;
+  int posY2 = rand() % Y_POS_LEN;
   BADDIE2_Y = Y_POSITIONS[posY2];
+  int posY3 = rand() % Y_POS_LEN;
+  BADDIE3_Y = Y_POSITIONS[posY3];
+  int posY4 = rand() % Y_POS_LEN;
+  BADDIE4_Y = Y_POSITIONS[posY4];
+
+
+  if(BADDIE1_X<24 && BADDIE1_LEFT){
+    BADDIE1_LEFT = false;
+  }
+  if(BADDIE2_X<24 && BADDIE2_LEFT){
+    BADDIE2_LEFT = false;
+  }
+  BADDIE3_DOWN = false;
+  BADDIE4_DOWN = true;
 
   BOMB_DROPPED = false;
   BOMB_DONE = false;
   BOMB_X = PLAYER_X+2;
   BOMB_Y = PLAYER_Y+2;
   BOMBS_LEFT = 3;
-
-  TIME = 10;
   
-  delay(100); 
+  TIME = 10;
+
+  BG = rand() % 3;
+  CR8 = rand() % 3;
+  
+  delay(200); 
 }
 
 void trace(String thepraise){
