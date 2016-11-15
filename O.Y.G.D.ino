@@ -3,6 +3,16 @@
  * Grant D. McVittie
  * PixelPlatforms
  * 
+ * v.0.3
+ * 
+ * UPDATES:
+ * - baddies will never insta-kill you upon respawn
+ * - baby mode (4 steps at a time, grid overlay, 5 bombs and 12s)
+ * - easy mode (4 steps at a time, 3 bombs and 10s)
+ * - hard mode (2 steps at a time, 2 bombs and 8s)
+ * - key mode (2 steps at a time, 8 bombs, 16s, but you need to get a key before getting to the door)
+ * 
+ * 
  * v0.2
  * 
  * UPDATES:
@@ -12,6 +22,7 @@
  * - randomized door position
  * - added easy mode
  * - added sound on/off
+ * - added un-bombable blocks
  * - adjusted hit areas
  */
 #include <Arduboy2.h>
@@ -28,10 +39,13 @@ int TIME = 10;
 
 /*
  * MODE
- * 0 = normal
- * 1 = easy
  */
-bool EASY = true;
+bool BABY = false;
+bool EASY = false;
+bool HARD = false;
+bool NEEDKEY = true;
+
+bool HAS_KEY = false;
 /*
  * audio
  */
@@ -82,6 +96,11 @@ int BADDIE4_X = 24;
 int BADDIE4_Y = 16;
 bool BADDIE4_DOWN = false;
 /*
+ * key position
+ */
+int KEY_X = 112;
+int KEY_Y = 8;
+/*
  * collisions
  */
 bool COLLIDE = false;
@@ -99,6 +118,11 @@ int BLOCK_Y_POSITIONS [] = {16,32,48};
 int BLOCK_Y_POS_LEN = 2;
 int DOOR_X_POSITIONS [] = {24,32,40,56,64,72,88,104,112};
 int DOOR_X_POS_LEN = 8;
+int BADDIE_X_POSITIONS [] = {16,24,32,40,48,56,64,72,80,88,96,104,112};
+int BADDIE_X_POS_LEN = 12;
+int BADDIE_Y_POSITIONS [] = {16,24,32,48,56};
+int BADDIE_Y_POS_LEN = 4;
+
 /*
  * bounderies
  */
@@ -160,21 +184,43 @@ void buildLevel(){
       }else{
         arduboy.drawBitmap(29,47,sound_off,16,16,BLACK);
       }
-      if(!EASY){
+      if(NEEDKEY){
+        arduboy.drawBitmap(50,47,needkey,16,16,BLACK);
+      }else if(HARD){
         arduboy.drawBitmap(50,47,hard,16,16,BLACK);
-      }else{
+      } else if(EASY){
         arduboy.drawBitmap(50,47,easy,16,16,BLACK);
+      } else if(BABY){
+        arduboy.drawBitmap(50,47,baby,16,16,BLACK);
       }
     break;
     case 2:
       arduboy.setCursor(12,12);
       arduboy.print( String("YOU HAVE ONE JOB,") );
       arduboy.setCursor(12,20);
-      arduboy.print( String("3 BOMBS, AND 10s:") );      
-      arduboy.setCursor(12,28);
-      arduboy.print( String("GET TO THE DOOR...") );
-      arduboy.setCursor(12,36);
-      arduboy.print( String("ALIVE.") );
+      if(NEEDKEY){
+        arduboy.print( String("8 BOMBS, AND 16s:") );
+      }else if(HARD){
+        arduboy.print( String("2 BOMBS, AND 8s:") );
+      } else if(EASY){
+        arduboy.print( String("3 BOMBS, AND 10s:") );
+      } else if(BABY){
+        arduboy.print( String("5 BOMBS, AND 12s:") );
+      }
+      if(NEEDKEY){
+        arduboy.setCursor(12,28);
+        arduboy.print( String("GET THE KEY AND") );
+        arduboy.setCursor(12,36);
+        arduboy.print( String("GET TO THE DOOR...") );
+        arduboy.setCursor(12,48);
+        arduboy.print( String("ALIVE.") );
+      } else {
+        arduboy.setCursor(12,28);
+        arduboy.print( String("GET TO THE DOOR...") );
+        arduboy.setCursor(12,36);
+        arduboy.print( String("ALIVE.") );
+      }
+      
       arduboy.setCursor(64,56);
       arduboy.print( String("GOOD LUCK!") );
       delay(150);
@@ -196,7 +242,17 @@ void buildLevel(){
           arduboy.drawSlowXYBitmap(0,0,background, 128, 64, WHITE);
         }
 
-        
+        if(BABY){
+          arduboy.drawBitmap(0,0,grid,128,64,BLACK);
+        }
+
+        if(NEEDKEY && !HAS_KEY){
+          if(!HAS_KEY){
+            arduboy.drawBitmap(KEY_X,KEY_Y,key,8,8,BLACK);
+          } else {
+            arduboy.drawBitmap(26,-1,key,8,8,BLACK);
+          }         
+        }
         
         //crates
         if(CRATES_ADDED == false){
@@ -266,10 +322,26 @@ void countDown(){
         }
       }
       if ( arduboy.pressed(B_BUTTON) ){
-        if(EASY){
-          EASY = false;
-        } else {
+        if(BABY){
+          BABY = false;
           EASY = true;
+          HARD = false;
+          NEEDKEY = false;
+        } else if(EASY){
+          BABY = false;
+          EASY = false;   
+          HARD = true;
+          NEEDKEY = false;       
+        } else if(HARD){
+          BABY = false;
+          EASY = false;
+          HARD = false;
+          NEEDKEY = true;
+        } else if(NEEDKEY){
+          BABY = true;
+          EASY = false;
+          HARD = false;
+          NEEDKEY = false;
         }
       }
       
@@ -286,8 +358,10 @@ void countDown(){
     break;
     //playing
     case 1:
-      if(EASY){
-        PLAYER_SPEED = 8;
+      if(BABY || EASY){
+        PLAYER_SPEED = 4;
+      } else if(HARD || NEEDKEY){
+        PLAYER_SPEED = 2;
       }
       if(!COLLIDE){
         if ( arduboy.pressed(RIGHT_BUTTON) ){
@@ -424,7 +498,14 @@ void drawCrates(){
     
   }
   //add door  
-  arduboy.drawBitmap(DOOR_X,DOOR_Y,door,8,8,BLACK);
+  if(!NEEDKEY){
+    arduboy.drawBitmap(DOOR_X,DOOR_Y,door,8,8,BLACK);
+  } else{
+    if(NEEDKEY && HAS_KEY){
+      arduboy.drawBitmap(DOOR_X,DOOR_Y,door,8,8,BLACK);
+    }
+  }
+  
 }
 
 /*
@@ -648,13 +729,33 @@ void collisionDetection(){
       soundBad();
     }
   }
+
+  if (PLAYER_X < KEY_X + 7 && PLAYER_X + 7 > KEY_X && PLAYER_Y < KEY_Y + 7 && 7 + PLAYER_Y > KEY_Y) {
+    if(NEEDKEY){
+      HAS_KEY = true;
+      if(SOUND_ENABLED){
+        soundHit();
+      }
+    }
+  }
   
   if (PLAYER_X < DOOR_X + 7 && PLAYER_X + 7 > DOOR_X && PLAYER_Y < DOOR_Y + 7 && 7 + PLAYER_Y > DOOR_Y) {
-    if(SOUND_ENABLED){
-      soundHit();
+    if(NEEDKEY){
+      if(HAS_KEY){
+        if(SOUND_ENABLED){
+          soundHit();
+        }
+        CURRENT_LEVEL++;
+        reset();
+      }
+    } else {
+      if(SOUND_ENABLED){
+        soundHit();
+      }
+      CURRENT_LEVEL++;
+      reset();
     }
-    CURRENT_LEVEL++;
-    reset();
+    
   }
 }
 
@@ -675,28 +776,29 @@ void reset(){
   COLLIDE = false;
   GAME_STATE = 1;
 
-  int posX1 = rand() % X_POS_LEN;
-  BADDIE1_X = X_POSITIONS[posX1];
-  int posX2 = rand() % X_POS_LEN;
-  BADDIE2_X = X_POSITIONS[posX2];
-  int posX3 = rand() % X_POS_LEN;
+  int posX1 = rand() % BADDIE_X_POS_LEN;
+  BADDIE1_X = BADDIE_X_POSITIONS[posX1];
+  int posX2 = rand() % BADDIE_X_POS_LEN;
+  BADDIE2_X = BADDIE_X_POSITIONS[posX2];
+  int posX3 = rand() % BADDIE_X_POS_LEN;
   if(posX3==0){
     posX3 = 1;
   }
-  BADDIE3_X = X_POSITIONS[posX3];
-  int posX4 = rand() % X_POS_LEN;
+  BADDIE3_X = BADDIE_X_POSITIONS[posX3];
+  int posX4 = rand() % BADDIE_X_POS_LEN;
   if(posX4==0){
     posX4 = 1;
   }
-  BADDIE4_X = X_POSITIONS[posX4];
-  int posY1 = rand() % Y_POS_LEN;
-  BADDIE1_Y = Y_POSITIONS[posY1];
-  int posY2 = rand() % Y_POS_LEN;
-  BADDIE2_Y = Y_POSITIONS[posY2];
-  int posY3 = rand() % Y_POS_LEN;
-  BADDIE3_Y = Y_POSITIONS[posY3];
-  int posY4 = rand() % Y_POS_LEN;
-  BADDIE4_Y = Y_POSITIONS[posY4];
+  BADDIE4_X = BADDIE_X_POSITIONS[posX4];
+  int posY1 = rand() % BADDIE_Y_POS_LEN;
+  BADDIE1_Y = BADDIE_Y_POSITIONS[posY1];
+  int posY2 = rand() % BADDIE_Y_POS_LEN;
+  BADDIE2_Y = BADDIE_Y_POSITIONS[posY2];
+  int posY3 = rand() % BADDIE_Y_POS_LEN;
+  BADDIE3_Y = BADDIE_Y_POSITIONS[posY3];
+  int posY4 = rand() % BADDIE_Y_POS_LEN;
+  BADDIE4_Y = BADDIE_Y_POSITIONS[posY4];
+
 
 
   if(BADDIE1_X<24 && BADDIE1_LEFT){
@@ -712,9 +814,22 @@ void reset(){
   BOMB_DONE = false;
   BOMB_X = PLAYER_X+2;
   BOMB_Y = PLAYER_Y+2;
-  BOMBS_LEFT = 3;
   
-  TIME = 10;
+
+  if(BABY){
+    TIME = 12;
+    BOMBS_LEFT = 5;
+  }else if(EASY){
+    TIME = 10;
+    BOMBS_LEFT = 3;
+  } else if(HARD){
+    TIME = 8;
+    BOMBS_LEFT = 2;
+  } else if(NEEDKEY){
+    HAS_KEY = false;
+    TIME = 16;
+    BOMBS_LEFT = 8;
+  }    
 
   BG = rand() % 3;
   CR8 = rand() % 3;
