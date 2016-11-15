@@ -731,11 +731,11 @@ void collisionDetection(){
   }
 
   if (PLAYER_X < KEY_X + 7 && PLAYER_X + 7 > KEY_X && PLAYER_Y < KEY_Y + 7 && 7 + PLAYER_Y > KEY_Y) {
-    if(NEEDKEY){
-      HAS_KEY = true;
-      if(SOUND_ENABLED){
+    if(NEEDKEY){      
+      if(SOUND_ENABLED && !HAS_KEY){
         soundHit();
       }
+      HAS_KEY = true;
     }
   }
   
